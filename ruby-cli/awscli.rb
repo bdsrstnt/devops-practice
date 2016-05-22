@@ -15,7 +15,7 @@ end
 
 Aws.config.update(access_key_id: ENV[AWS_CLI_ID],
                   secret_access_key: ENV[AWS_CLI_SECRET],
-                  region: 'eu-central-1')
+                  region: ENV[AWS_REGION])
 
 # Class to get info and interact with AWS EC2 instances and auto scaling groups.
 class AwsCli < Thor
