@@ -132,12 +132,6 @@ class AwsCli < Thor
     end
   end
 
-  desc 'setup_drupal_ha_cluster', 'Creates a fully functionng Drupal HA cluster in AWS.'
-  def setup_drupal_ha_cluster()
-	#self.create_new_db_instance();
-	self.create_newec2_instace();
-  end
-  
   no_commands do
     def get_instance_id(options)
       instance_id = options[:instance_id]
@@ -158,56 +152,6 @@ class AwsCli < Thor
       end
       public_ip
     end
-	
-	# creates a new db isntance
-	def create_new_db_instance()
-		rds = Aws::RDS::Client.new;
-		puts 'Creating database...'
-		db_id = 'db-' + SecureRandom.hex(3);
-		resp = rds.create_db_instance({
-			db_name: "testdb",
-			db_instance_identifier: db_id,
-			db_instance_class: "db.t2.micro",
-			engine: "MySQL",
-			allocated_storage: 5,
-			master_username: "admin",
-			master_user_password: "admin123"
-		})
-		puts "Waiting for db #{db_id}"
-		rds.wait_until(:db_instance_available, {db_instance_identifier: db_id})
-		puts 'Database created. Info:'
-		puts "Insta stat: #{resp.db_instance.db_instance_status}"
-		puts "Admin user: #{resp.db_instance.master_username}"
-		puts "Class: #{resp.db_instance.db_instance_class}"
-		puts "Host: #{resp.db_instance.endpoint.address}"
-		puts "Port: #{resp.db_instance.db_instance_port}"
-	end
-	
-	def create_newec2_instace()
-	  ec2 = Aws::EC2::Resource.new
-	  puts 'Creating new EC2 instance'
-	  insta = ec2.create_instances({
-	    image_id: "ami-87564feb", # PARAM
-	    min_count: 1,
-	    max_count: 1,
-		instance_type: "t2.micro", # PARAM
-		monitoring: {
-         enabled: false, # required
-        },
-		instance_initiated_shutdown_behavior: "stop"
-	  })
-	  insta[0] = insta[0].wait_until_running
-	  puts "#{insta[0].id} is running"
-	end
-	
-	def create_security_group()
-	  client = Aws::EC2::Client.new
-	  resp = client.create_security_group({
-        dry_run: false,
-        group_name: "String", # required
-        description: "SSH and HTTP 80 security group.", # required
-	  })
-	end
   end
 end
 AwsCli.start(ARGV)
