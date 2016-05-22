@@ -94,7 +94,7 @@ exec { 'purge-drupal-download':
 # install drupal with drush
 exec { 'install-drupal':
   require => Exec['copy-drupal-to-apache'],
-  command => "${drush} -y si --db-url='${drush_db_url}' --account-pass=${drupal_admin_pass}",
+  command => "${drush} -y si --db-url='${drush_db_url}' --site-name=${drupal_site_name} --account-pass=${drupal_admin_pass}",
   cwd     => "${apache_doc_root}/${drupal_dl_name}"
 }
 
