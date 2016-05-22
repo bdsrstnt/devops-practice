@@ -3,6 +3,7 @@
 apt-get update
 apt-get install ruby -y
 apt-get install gem -y
+apt-get install mysql-client -y
 
 #install CLI dependencies
 gem install aws-sdk
@@ -13,7 +14,6 @@ wget https://apt.puppetlabs.com/puppetlabs-release-pc1-trusty.deb
 dpkg -i puppetlabs-release-pc1-trusty.deb
 apt-get update -y
 apt-get install puppet -y
-apt-get install mysql-client -y
 
 #install puppetlabs apache module
 puppet module install puppetlabs-apache
