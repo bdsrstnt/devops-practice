@@ -2,6 +2,7 @@ $apache_doc_root = '/var/www/html'
 $php_conf_root = '/etc/php5/apache2/conf.d'
 $drupal_dl_name = 'drupal'
 $drush = '/usr/bin/drush'
+$drush_db_url = "mysql://${drupal_db_user}:${drupal_db_pass}@${drupal_db_host}:${drupal_db_port}/${drupal_db_name}"
 
 # execute 'apt-get update'
 exec { 'apt-update':
@@ -84,20 +85,21 @@ exec { 'copy-drupal-to-apache':
   command => "/bin/cp -r /tmp/${drupal_dl_name} ${apache_doc_root}"
 }
 
-# set www-data as owner for /var/www/html
-exec { 'set-www-data-owner':
-  require => Exec['copy-drupal-to-apache'],
-  command => "/bin/chown -R :www-data ${apache_doc_root}/*"
-}
-
 # cleanup drupal download
 exec { 'purge-drupal-download':
   require => Exec['copy-drupal-to-apache'],
   command => "/bin/rm -r /tmp/${drupal_dl_name}"
 }
 
+# install drupal with drush
+exec { 'install-drupal':
+  require => Exec['copy-drupal-to-apache'],
+  command => "${drush} -y si --db-url='${drush_db_url}' --account-pass=${drupal_admin_pass}",
+  cwd     => "${apache_doc_root}/${drupal_dl_name}"
+}
+
 # restart apache
 exec {'restart-apache':
-  require => Exec['copy-drupal-to-apache'],
+  require => Exec['install-drupal'],
   command => '/usr/bin/service apache2 restart'
 }
