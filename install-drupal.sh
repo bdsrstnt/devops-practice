@@ -1,8 +1,5 @@
 #!/bin/sh
-#install ruby, gem, puppet, aws-sdk, thor and some puppetlabs modules
 apt-get update
-apt-get install ruby -y
-apt-get install gem -y
 
 #install CLI dependencies
 gem install aws-sdk
