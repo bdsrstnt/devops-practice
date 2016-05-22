@@ -84,6 +84,12 @@ exec { 'copy-drupal-to-apache':
   command => "/bin/cp -r /tmp/${drupal_dl_name} ${apache_doc_root}"
 }
 
+# set www-data as owner for /var/www/html
+exec { 'set-www-data-owner':
+  require => Exec['copy-drupal-to-apache'],
+  command => "/bin/chown -R :www-data ${apache_doc_root}/*"
+}
+
 # cleanup drupal download
 exec { 'purge-drupal-download':
   require => Exec['copy-drupal-to-apache'],
