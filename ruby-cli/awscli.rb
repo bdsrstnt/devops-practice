@@ -2,115 +2,97 @@
 require 'aws-sdk'
 require 'thor'
 require 'net/http'
-require 'securerandom'
-
-AWS_CLI_ID = 'AWS_CLI_ID'.freeze
-AWS_CLI_SECRET = 'AWS_CLI_SECRET'.freeze
-AWS_REGION = 'AWS_REGION'.freeze
+require 'active_support/core_ext/string'
 
 # check aws access data
-if !ENV.key?(AWS_CLI_ID) || !ENV.key?(AWS_CLI_SECRET) || !ENV.key?(AWS_REGION)
-  raise "Set ENV entries: #{AWS_CLI_ID} , #{AWS_CLI_SECRET}, #{AWS_REGION}"
+if !ENV.key?(:AWS_CLI_ID.to_s) || !ENV.key?(:AWS_CLI_SECRET.to_s) || !ENV.key?(:AWS_REGION.to_s)
+  raise 'Set ENV entries: :AWS_CLI_ID , AWS_CLI_SECRET, AWS_REGION'
 end
 
-Aws.config.update(access_key_id: ENV[AWS_CLI_ID],
-                  secret_access_key: ENV[AWS_CLI_SECRET],
-                  region: ENV[AWS_REGION])
+Aws.config.update(access_key_id: ENV[:AWS_CLI_ID.to_s],
+                  secret_access_key: ENV[:AWS_CLI_SECRET.to_s],
+                  region: ENV[:AWS_REGION.to_s])
 
 # Class to get info and interact with AWS EC2 instances and auto scaling groups.
 class AwsCli < Thor
-  TYPE_INSTANCE_ID = 'Type instance ID:'.freeze
-  TYPE_PUBLIC_IP = 'Type public IP:'.freeze
-
-  desc 'drupal_status', 'check drupal status'
-  method_option :host, desc: 'Specifiy public IP or DNS of host where Drupal is running.'
-  def drupal_status
-    host = get_host(options)
-    uri = URI("http://#{host}/drupal/")
-    res = Net::HTTP.get_response(uri)
+  desc 'drupal_status [HOST]', 'Check drupal status. HOST can be public IP or DNS'
+  def drupal_status(host)
+    host = 'http://' + host unless host.start_with?('http://')
+    res = Net::HTTP.get_response(URI("#{host}/drupal/"))
     puts res.body
-    puts res.code
+    puts "Returned HTTP status code: #{res.code}"
+    puts "Expires header: #{res["expires"]}"
+    if res["expires"].eql? 'Sun, 19 Nov 1978 05:00:00 GMT'
+      puts "Looks OK."
+    end
   end
 
-  desc 'info', 'get info about instances'
+  desc 'info', 'Get info about instances'
   def info
     ec2 = Aws::EC2::Resource.new
-
     ec2.instances.each do |i|
+      puts '--'
       puts "Instance ID: #{i.id}"
       puts "State: #{i.state.name}"
       puts "Public IP: #{i.public_ip_address}"
-      puts ''
     end
   end
 
-  desc 'reboot', 'reboots an instance'
+  desc 'reboot', 'Reboots an instance'
   method_option :instance_id, desc: 'Specifiy which instance to start.'
   def reboot
     ec2 = Aws::EC2::Resource.new
-
-    instance_id = get_instance_id(options)
-
-    i = ec2.instance(instance_id)
-
+    i = ec2.instance(get_instance_id(options))
     if i.exists?
       case i.state.code
-        when 48 # terminated
-          puts "#{instance_id} is terminated, so you cannot reboot it"
-        else
-          i.reboot
+      when 48 # terminated
+        puts "#{instance_id} is terminated, so you cannot reboot it"
+      else
+        i.reboot
       end
     end
   end
 
-  desc 'start', 'start an instance'
+  desc 'start', 'Start an instance'
   method_option :instance_id, desc: 'Specifiy which instance to start.'
   def start
     ec2 = Aws::EC2::Resource.new
-
-    instance_id = get_instance_id(options)
-
-    i = ec2.instance(instance_id)
-
+    i = ec2.instance(get_instance_id(options))
     if i.exists?
       case i.state.code
-        when 0  # pending
-          puts "#{instance_id} is pending, so it will be running in a bit"
-        when 16  # started
-          puts "#{instance_id} is already started"
-        when 48  # terminated
-          puts "#{instance_id} is terminated, so you cannot start it"
-        else
-          i.start
+      when 0  # pending
+        puts "#{instance_id} is pending, so it will be running in a bit"
+      when 16  # started
+        puts "#{instance_id} is already started"
+      when 48  # terminated
+        puts "#{instance_id} is terminated, so you cannot start it"
+      else
+        i.start
       end
     end
   end
 
-  desc 'stop', 'stop an instance'
+  desc 'stop', 'Stop an instance'
   method_option :instance_id, desc: 'Specifiy which instance to stop.'
   def stop
     ec2 = Aws::EC2::Resource.new
-
-    instance_id = get_instance_id(options)
-
-    i = ec2.instance(instance_id)
-
+    i = ec2.instance(get_instance_id(options))
     if i.exists?
       case i.state.code
-        when 48  # terminated
-          puts "#{instance_id} is terminated, so you cannot stop it"
-        when 64  # stopping
-          puts "#{instance_id} is stopping, so it will be stopped in a bit"
-        when 89  # stopped
-          puts "#{instance_id} is already stopped"
-        else
-          i.stop
-          puts "#{instance_id} stop process started"
+      when 48  # terminated
+        puts "#{instance_id} is terminated, so you cannot stop it"
+      when 64  # stopping
+        puts "#{instance_id} is stopping, so it will be stopped in a bit"
+      when 89  # stopped
+        puts "#{instance_id} is already stopped"
+      else
+        i.stop
+        puts "#{instance_id} stop process started"
       end
     end
   end
 
-  desc 'autoscale_info', 'prints information about autoscaling groups.'
+  desc 'autoscale_info', 'Prints information about autoscaling groups.'
   def autoscale_info
     resource = Aws::AutoScaling::Resource.new
     client = Aws::ElasticLoadBalancing::Client.new
@@ -121,7 +103,7 @@ class AwsCli < Thor
       puts "Max size: #{autoscalinggroup.max_size}"
       puts "Desired size: #{autoscalinggroup.desired_capacity}"
       puts 'Loadbalancers: '
-      lbresp = client.describe_load_balancers({load_balancer_names: autoscalinggroup.load_balancer_names})
+      lbresp = client.describe_load_balancers(load_balancer_names: autoscalinggroup.load_balancer_names)
       lbresp.load_balancer_descriptions.each do |lb|
         puts "Name: #{lb.load_balancer_name}"
         puts "Public DNS: #{lb.dns_name}"
@@ -134,86 +116,81 @@ class AwsCli < Thor
     end
   end
 
-  desc 'setup_drupal_ha_cluster', 'sets up a drupal cluster with CloudFormation'
+  desc 'setup_drupal_ha_cluster', 'Sets up a drupal cluster with CloudFormation'
+  method_option :stack_name, desc: 'Name of the stack. Default: myStack'
+  method_option :key_name, desc: 'Name of the key-pair, which can be used to connect via SSH.'
+  method_option :drupal_admin_password, desc: 'Drupal admin password'
+  method_option :drupal_site_name, desc: 'Drupal site name. Default: My Drupal Site'
+  method_option :db_name, desc: 'DB name. Default: myDatabase'
+  method_option :db_user, desc: 'DB admin user name'
+  method_option :db_password, desc: 'DB admin password'
+  method_option :db_allocated_storage, desc: 'Db size (Gb). Default: 5'
+  method_option :db_instance_class, desc: 'DB instance class. Default: db.t2.micro'
+  method_option :web_server_capacity, desc: 'Webserver capacity, between 1-5. Default: 2'
+  method_option :instance_type, desc: 'EC2 instance type. Default: t2.micro'
+  method_option :ssh_location, desc: 'Allowed IP\'s for SSH, in valid IP CIDR range (x.x.x.x/x). Default: 0.0.0.0/0'
   def setup_drupal_ha_cluster
-    stack_name = get_user_input('Stack name', 'myStack')
-    ssh_key = get_template_parameter('SSH acces key name', 'default', 'KeyName')
-    drupal_admin_pass = get_template_parameter('Drupal admin password', 'admin123', 'DrupalAdminPassword')
-    drupal_site_name = get_template_parameter('Drupal site name', 'My Drupal Site', 'DrupalSiteName')
-    db_name = get_template_parameter('Database name', 'drupaldb', 'DBName')
-    db_admin = get_template_parameter('Database master user name', 'admin', 'DBUser')
-    db_admin_pass = get_template_parameter('Database master user password', 'admin123', 'DBPassword')
-    db_allocated_strorage = get_template_parameter('The size of the database (Gb)', '5', 'DBAllocatedStorage')
-    db_insta_class = get_template_parameter('The database instance type', 'db.t2.micro', 'DBInstanceClass')
-    # db_multiaz = get_user_input("The database instance type", "db.t2.micro")
-    capacity = get_template_parameter('The initial number of WebServer instances (min: 1, max: 5)', '2', 'WebServerCapacity')
-    instance_type = get_template_parameter('WebServer EC2 instance type', 't2.micro', 'InstanceType')
-    ssh_location = get_template_parameter('The IP address range that can be used to SSH to the EC2 instances (valid IP CIDR range of the form x.x.x.x/x.)', '0.0.0.0/0', 'SSHLocation')
-
+    template_url = 'https://s3.eu-central-1.amazonaws.com/cf-templates-1qna2fr92gh55-eu-central-1/drupal-cluster-ubuntu-1404.template'
     cloudformation = Aws::CloudFormation::Client.new
-    puts 'Creating new stack'
+    tpl = cloudformation.get_template_summary(template_url: template_url)
+    parameters = []
+    tpl.parameters.each do |p|
+      parameters.push(parameter_key: p.parameter_key,
+                      parameter_value: options[p.parameter_key.underscore],
+                      use_previous_value: false) unless options[p.parameter_key.underscore].nil?
+    end
+    stack_name = options[:stack_name] || :myStack
+    puts "Creating new stack #{stack_name}"
     resp = cloudformation.create_stack(stack_name: stack_name,
-                                       template_url: 'https://s3.eu-central-1.amazonaws.com/cf-templates-1qna2fr92gh55-eu-central-1/drupal-cluster-ubuntu-1404.template',
+                                       template_url: template_url,
                                        on_failure: 'ROLLBACK',
-                                       parameters: [
-                                           ssh_key,
-                                           drupal_admin_pass,
-                                           drupal_site_name,
-                                           db_name,
-                                           db_admin,
-                                           db_admin_pass,
-                                           db_allocated_strorage,
-                                           db_insta_class,
-                                           capacity,
-                                           instance_type,
-                                           ssh_location
-                                       ])
-    cloudformation.wait_until(:stack_create_complete, {stack_name: stack_name}) do |w|
-      w.max_attempts = nil;
-      w.delay = 5;
-      w.before_attempt do |n|
-        client = Aws::CloudFormation::Client.new
-        stack_events = client.describe_stack_events({stack_name: stack_name})
-        stack_events.stack_events.reverse.each do |ev|
-          puts "#{ev.timestamp}  #{ev.resource_status}  #{ev.resource_type} #{ev.logical_resource_id}  #{ev.resource_status_reason}"
-        end
+                                       parameters: parameters)
+    cloudformation.wait_until(:stack_create_complete, stack_name: stack_name) do |w|
+      w.max_attempts = nil
+      w.delay = 5
+      w.before_attempt do |_n|
+        describe_stack_events(cloudformation, stack_name)
       end
     end
-    puts 'Stack creation is done.'
-    resp = cloudformation.describe_stacks(stack_name: stack_name)
-    resp.stacks.each do |stack|
-      puts "ID: #{stack.stack_id}"
-      puts "Name: #{stack.stack_name}"
-      puts "Creation time: #{stack.creation_time}"
-      puts 'Parameters:'
-      stack.parameters.each do |p|
-        puts "  #{p.parameter_key}: #{p.parameter_value}"
-      end
-      puts 'Outputs:'
-      stack.outputs.each do |o|
-        puts "  #{o.output_key}: #{o.output_value}"
+    puts "Creating stack #{stack_name} is succesful."
+    stack = stack_info(stack_name)
+  end
+
+  desc 'delete_stack [STACK_NAME]', 'Deletes the specified stack'
+  def delete_stack(stack_name)
+    cloudformation = Aws::CloudFormation::Client.new
+    cloudformation.delete_stack({
+      stack_name: stack_name
+    })
+    puts "Deleting stack #{stack_name}"
+    cloudformation.wait_until(:stack_delete_complete, stack_name: stack_name) do |w|
+      w.max_attempts = nil
+      w.delay = 5
+      w.before_attempt do |_n|
+        describe_stack_events(cloudformation, stack_name, 'DELETE')
       end
     end
   end
 
-  desc 'stack_info', 'info about all created stacks'
-  def stack_info
+  desc 'stack_info [STACK_NAME]', 'Info about the specfied stack'
+  def stack_info(stack_name)
     cloudformation = Aws::CloudFormation::Client.new
-    resp = cloudformation.describe_stacks
+    resp = cloudformation.describe_stacks(stack_name: stack_name)
     puts 'No stacks.' if resp.stacks.empty?
-    resp.stacks.each do |stack|
-      puts "Name: #{stack.stack_name}"
-      puts "Creation time: #{stack.creation_time}"
-      puts "Status: #{stack.stack_status}"
-      puts 'Parameters:'
-      stack.parameters.each do |p|
-        puts "  #{p.parameter_key}: #{p.parameter_value}"
-      end
-      puts 'Outputs:'
-      stack.outputs.each do |o|
-        puts "  #{o.output_key}: #{o.output_value}"
-      end
+    stack = resp.stacks[0]
+    puts "ID: #{stack.stack_id}"
+    puts "Name: #{stack.stack_name}"
+    puts "Creation time: #{stack.creation_time}"
+    puts "Status: #{stack.stack_status}"
+    puts 'Parameters:'
+    stack.parameters.each do |p|
+      puts "  #{p.parameter_key}: #{p.parameter_value}"
     end
+    puts 'Outputs:'
+    stack.outputs.each do |o|
+      puts "  #{o.output_key}: #{o.output_value}"
+    end
+    stack
   end
 
   no_commands do
@@ -221,20 +198,21 @@ class AwsCli < Thor
       instance_id = options[:instance_id]
       unless instance_id
         info
-        puts TYPE_INSTANCE_ID
+        puts 'Type instance ID'
         instance_id = STDIN.gets.chomp
       end
       instance_id
     end
-
-    def get_host(options)
-      host = options[:host]
-      unless host
-        info
-        puts TYPE_PUBLIC_IP
-        host = STDIN.gets.chomp
-      end
-      host
+    
+    def describe_stack_events(client, stack_name, *filter)
+        resp = client.describe_stack_events(stack_name: stack_name)
+        stack_events = resp.stack_events
+        if filter.size() > 0
+          stack_events = stack_events.select {|ev| ev[:resource_status].start_with?(filter[0].to_s)}
+        end
+        stack_events.reverse.each do |ev|
+          puts "#{ev.timestamp}  #{ev.resource_status}  #{ev.resource_type} #{ev.logical_resource_id}  #{ev.resource_status_reason}"
+        end
     end
 
     def get_user_input(message, default)
@@ -250,9 +228,9 @@ class AwsCli < Thor
     def get_template_parameter(message, default, key)
       value = get_user_input(message, default)
       {
-          parameter_key: key,
-          parameter_value: value,
-          use_previous_value: false
+        parameter_key: key,
+        parameter_value: value,
+        use_previous_value: false
       }
     end
   end

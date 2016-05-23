@@ -61,7 +61,6 @@ file {"${php_conf_root}/drupal_specific.ini":
 }
 
 # install drush
-# todo refactor
 package { 'drush':
   require => Package['apache2']
 }

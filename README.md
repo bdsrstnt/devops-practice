@@ -34,16 +34,58 @@ $ ruby awscli.rb [command] [--options]
 ```
 
 #### Commands
-Command         | Options | Description
-----------------|---------|------------
-`info`          | -       | Prints instance ID, state and punlic IP of your EC2 instances.
-`drupal_status` | --host = public ip or DNS of the target server. If not set, then you can choose from a list of EC2 instances. | HTTP GET to the specified host like this: http://{publicIp}/drupal.
-`reboot`        | --instance_id = the ID of the instance. If not set, you can choose from a list of EC2 instances. | Reboots the selected EC2 instance.
-`start`         | --instance_id = the ID of the instance. If not set, you can choose from a list of EC2 instances. | Starts the selected EC2 instance.
-`stop`          | --instance_id = the ID of the instance. If not set, you can choose from a list of EC2 instances. | Stops the selected EC2 instance.
-`autoscale_info` | - | Prints information about your auto scaling groups.
-`setup_drupal_ha_cluster` | - | Asks for some data, then sets up a working Drupal cluster in the AWS cloud.
-`stack_info` | - | Prints information about your stacks.
+**autoscale_info**<br>
+Prints information about autoscaling groups
+
+**drupal_status [HOST]**<br>
+Check drupal status. HOST can be public IP or DNS
+
+**info**<br>
+Get info about instances
+
+**start**<br>
+Start an instance
+```sh
+Options:
+  [--instance-id=INSTANCE_ID]  # Specifiy which instance to start.
+```
+**stop**<br>
+Stop an instance
+```sh
+Options:
+  [--instance-id=INSTANCE_ID]  # Specifiy which instance to stop.
+```
+
+**reboot**<br>
+Reboot an instance
+```sh
+Options:
+  [--instance-id=INSTANCE_ID]  # Specifiy which instance to reboot.
+```
+
+**stack_info [STACK_NAME]**<br>
+Info about the specfied stack
+
+**delete_stack [STACK_NAME]**<br>
+Deletes the specfied stack
+
+**setup_drupal_ha_cluster**<br>
+Sets up a Drupal cluster with CloudFormation
+```sh
+Options:
+  [--stack-name=STACK_NAME]                        # Name of the stack. Default: myStack
+  [--key-name=KEY_NAME]                            # Name of the key-pair, which can be used to connect via SSH.
+  [--drupal-admin-password=DRUPAL_ADMIN_PASSWORD]  # Drupal admin password
+  [--drupal-site-name=DRUPAL_SITE_NAME]            # Drupal site name. Default: My Drupal Site
+  [--db-name=DB_NAME]                              # DB name. Default: myDatabase
+  [--db-user=DB_USER]                              # DB admin user name
+  [--db-password=DB_PASSWORD]                      # DB admin password
+  [--db-allocated-storage=DB_ALLOCATED_STORAGE]    # Db size (Gb). Default: 5
+  [--db-instance-class=DB_INSTANCE_CLASS]          # DB instance class. Default: db.t2.micro
+  [--web-server-capacity=WEB_SERVER_CAPACITY]      # Webserver capacity, between 1-5. Default: 2
+  [--instance-type=INSTANCE_TYPE]                  # EC2 instance type. Default: t2.micro
+  [--ssh-location=SSH_LOCATION]                    # Allowed IP's for SSH, in valid IP CIDR range (x.x.x.x/x). Default: 0.0.0.0/0
+```
 
 ### drupal-cluster-ubuntu-1404.template
 AWS CloudFormation template.
@@ -52,9 +94,11 @@ Creates:
 * AutoScalingGroup
 * LaunchConfiguration with Ubuntu EC2 instances (AMI id: ami-87564feb) 
 * SecurityGroup for HTTP 80 and SSH 22 access, and one for the database access
-* DBInstance which is a MySql database
+* MySql RDS DBInstance
 
 #### About the instances
 The launch configuration will create EC2 instances from image **ami-87564feb**.
 The config will run the [install-drupal.sh](https://github.com/bdsrstnt/devops-practice/blob/master/install-drupal.sh) script to install the **Apache, PHP and Drupal**.
 Installation is done by Puppet. The used manifest is [drupal-install.pp](https://github.com/bdsrstnt/devops-practice/blob/master/puppet/drupal-install.pp)
+
+After the installation is done, your instance will have a running apache with php, and Drupal installed on it.
