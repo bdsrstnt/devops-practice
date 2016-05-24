@@ -2,6 +2,7 @@
 #install ruby, gem, puppet, aws-sdk, thor and some puppetlabs modules
 apt-get update
 apt-add-repository ppa:brightbox/ruby-ng -y
+apt-get update
 apt-get install ruby -y
 apt-get install gem -y
 apt-get install mysql-client -y
