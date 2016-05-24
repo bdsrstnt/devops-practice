@@ -97,6 +97,12 @@ exec { 'install-drupal':
   cwd     => "${apache_doc_root}/${drupal_dl_name}"
 }
 
+# set group for /var/www/html to www-data
+exec { 'chon-www-data':
+  require => Exec['install-drupal'],
+  command => "/bin/chown -R :www-data ${apache_doc_root}"
+}
+
 # restart apache
 exec {'restart-apache':
   require => Exec['install-drupal'],
