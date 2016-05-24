@@ -105,7 +105,7 @@ exec { 'chown-www-data':
 
 # set group for /var/www/html to www-data
 exec { 'chown-www-data':
-  require => Exec['hown-www-data'],
+  require => Exec['chown-www-data'],
   command => "/bin/chmod -R 644 ${apache_doc_root}/${drupal_dl_name}/sites/default/settings.php"
 }
 
