@@ -103,18 +103,17 @@ exec { 'chown-www-data':
   command => "/bin/chown -R :www-data ${apache_doc_root}"
 }
 
+# make sites/default
+exec { 'chmod-files':
+  require => Exec['chown-www-data'],
+  command => "/bin/chmod -R 664 ${apache_doc_root}/${drupal_dl_name}/sites/default"
+}
+
 # set lock settings.php
 exec { 'chmod-www-data':
-  require => Exec['chown-www-data'],
+  require => Exec['chmod-files'],
   command => "/bin/chmod -R 644 ${apache_doc_root}/${drupal_dl_name}/sites/default/settings.php"
 }
-
-# make sites/default/files writeable
-exec { 'chmod-files':
-  require => Exec['chmod-www-data'],
-  command => "/bin/chmod -R 664 ${apache_doc_root}/${drupal_dl_name}/sites/default/files"
-}
-
 
 # restart apache
 exec {'restart-apache':
