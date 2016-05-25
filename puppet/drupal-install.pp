@@ -100,7 +100,7 @@ exec { 'install-drupal':
 # set group for /var/www/html to www-data
 exec { 'chown-www-data':
   require => Exec['install-drupal'],
-  command => "/bin/chown -R www-data:www-data ${apache_doc_root}"
+  command => "/bin/chown -R :www-data ${apache_doc_root}"
 }
 
 # set group for /var/www/html to www-data
