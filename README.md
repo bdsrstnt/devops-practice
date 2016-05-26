@@ -63,9 +63,6 @@ Options:
   [--instance-id=INSTANCE_ID]  # Specifiy which instance to reboot.
 ```
 
-**stack_info [STACK_NAME]**<br>
-Info about the specfied stack
-
 **delete_stack [STACK_NAME]**<br>
 Deletes the specfied stack
 
@@ -87,18 +84,26 @@ Options:
   [--ssh-location=SSH_LOCATION]                    # Allowed IP's for SSH, in valid IP CIDR range (x.x.x.x/x). Default: 0.0.0.0/0
 ```
 
-### drupal-cluster-ubuntu-1404.template
-AWS CloudFormation template.
-Creates:
-* LoadBalancer
-* AutoScalingGroup
-* LaunchConfiguration with Ubuntu EC2 instances (AMI id: ami-87564feb) 
-* SecurityGroup for HTTP 80 and SSH 22 access, and one for the database access
-* MySql RDS DBInstance
+#### Cluster setup with the CLI
+##### Cooking a base EC2 instance 
+The drupal_recipe.tpl will create
+* an EC2 instance from image **ami-87564feb**
+* RDS MySql database 
 
-#### About the instances
-The launch configuration will create EC2 instances from image **ami-87564feb**.
-The config will run the [install-drupal.sh](https://github.com/bdsrstnt/devops-practice/blob/master/install-drupal.sh) script to install the **Apache, PHP and Drupal**.
+The template will run the [install-drupal.sh](https://github.com/bdsrstnt/devops-practice/blob/master/install-drupal.sh) script to install the **Apache, PHP and Drupal**.
 Installation is done by Puppet. The used manifest is [drupal-install.pp](https://github.com/bdsrstnt/devops-practice/blob/master/puppet/drupal-install.pp)
 
-After the installation is done, your instance will have a running apache with php, and Drupal installed on it.
+After the installation is done, your instance will have a running Apache with PHP, and Drupal installed on it.
+
+##### Creating AMI from the base instance
+After the base instance is up and running, with Drupal installed, the CLI creates a new AMI from this istance. When the AMI is available, the base instance is terminated.
+
+##### Creating the Drupal cluster
+The CLI will use the drupal_cluster.tpl to create the cluster stack.
+Parts:
+* LoadBalancer
+* AutoScalingGroup
+* LaunchConfiguration with the previously created AMI
+* SecurityGroup for HTTP 80 and SSH 20 access
+
+When the process is done, you can access the newly created Drupal cluster via the load balancer.
