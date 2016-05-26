@@ -6,7 +6,7 @@ require 'active_support/core_ext/string'
 
 # check aws access data
 if !ENV.key?(:AWS_CLI_ID.to_s) || !ENV.key?(:AWS_CLI_SECRET.to_s) || !ENV.key?(:AWS_REGION.to_s)
-  raise 'Set ENV entries: :AWS_CLI_ID , AWS_CLI_SECRET, AWS_REGION'
+  raise 'Set ENV entries: AWS_CLI_ID , AWS_CLI_SECRET, AWS_REGION'
 end
 
 Aws.config.update(access_key_id: ENV[:AWS_CLI_ID.to_s],
@@ -16,15 +16,22 @@ Aws.config.update(access_key_id: ENV[:AWS_CLI_ID.to_s],
 # Class to get info and interact with AWS EC2 instances and auto scaling groups.
 class AwsCli < Thor
   desc 'drupal_status [HOST]', 'Check drupal status. HOST can be public IP or DNS'
-  def drupal_status(host)
+  def drupal_status?(host)
     host = 'http://' + host unless host.start_with?('http://')
-    res = Net::HTTP.get_response(URI("#{host}/drupal/"))
+	begin
+      res = Net::HTTP.get_response(URI("#{host}/drupal/"))
+    rescue Errno::ECONNREFUSED
+      return false
+    end
     puts res.body
     puts "Returned HTTP status code: #{res.code}"
     puts "Expires header: #{res["expires"]}"
     if res["expires"].eql? 'Sun, 19 Nov 1978 05:00:00 GMT'
       puts "Looks OK."
     end
+	retval = res.code.eql?('200') && res.body.include?('name="Generator" content="Drupal')
+	puts retval
+	return retval
   end
 
   desc 'info', 'Get info about instances'
@@ -75,21 +82,8 @@ class AwsCli < Thor
   desc 'stop', 'Stop an instance'
   method_option :instance_id, desc: 'Specifiy which instance to stop.'
   def stop
-    ec2 = Aws::EC2::Resource.new
-    i = ec2.instance(get_instance_id(options))
-    if i.exists?
-      case i.state.code
-      when 48  # terminated
-        puts "#{instance_id} is terminated, so you cannot stop it"
-      when 64  # stopping
-        puts "#{instance_id} is stopping, so it will be stopped in a bit"
-      when 89  # stopped
-        puts "#{instance_id} is already stopped"
-      else
-        i.stop
-        puts "#{instance_id} stop process started"
-      end
-    end
+    instance_id = get_instance_id(options)
+	stop_instance(instance_id)
   end
 
   desc 'autoscale_info', 'Prints information about autoscaling groups.'
@@ -130,9 +124,10 @@ class AwsCli < Thor
   method_option :instance_type, desc: 'EC2 instance type. Default: t2.micro'
   method_option :ssh_location, desc: 'Allowed IP\'s for SSH, in valid IP CIDR range (x.x.x.x/x). Default: 0.0.0.0/0'
   def setup_drupal_ha_cluster
-    template_url = 'https://s3.eu-central-1.amazonaws.com/cf-templates-1qna2fr92gh55-eu-central-1/drupal-cluster-ubuntu-1404.template'
+    base_instance_template_url = 'https://s3.eu-central-1.amazonaws.com/cf-templates-1qna2fr92gh55-eu-central-1/drupal_recipe.tpl'
+    cluster_template_url = 'https://s3.eu-central-1.amazonaws.com/cf-templates-1qna2fr92gh55-eu-central-1/drupal_cluster.tpl'
     cloudformation = Aws::CloudFormation::Client.new
-    tpl = cloudformation.get_template_summary(template_url: template_url)
+    tpl = cloudformation.get_template_summary(template_url: base_instance_template_url)
     parameters = []
     tpl.parameters.each do |p|
       parameters.push(parameter_key: p.parameter_key,
@@ -141,19 +136,102 @@ class AwsCli < Thor
     end
     stack_name = options[:stack_name] || :myStack
     puts "Creating new stack #{stack_name}"
-    resp = cloudformation.create_stack(stack_name: stack_name,
-                                       template_url: template_url,
+	base_instance_stack_name = stack_name + "baseInstance"
+    resp = cloudformation.create_stack(stack_name: base_instance_stack_name,
+                                       template_url: base_instance_template_url,
                                        on_failure: 'ROLLBACK',
                                        parameters: parameters)
-    cloudformation.wait_until(:stack_create_complete, stack_name: stack_name) do |w|
+    cloudformation.wait_until(:stack_create_complete, stack_name: base_instance_stack_name) do |w|
+      w.max_attempts = nil
+      w.delay = 5
+      w.before_attempt do |_n|
+        describe_stack_events(cloudformation, base_instance_stack_name)
+      end
+    end
+	
+    resp = cloudformation.describe_stacks(stack_name: base_instance_stack_name)
+    puts 'No stacks.' if resp.stacks.empty?
+    stack = resp.stacks[0]
+	ip = stack.outputs.detect {|o| o[:output_key].eql? 'InstanceIP'}
+	ec2Resource = Aws::EC2::Resource.new
+	image_this = ec2Resource.instances.detect {|i| i.public_ip_address.eql? ip.output_value}
+	ec2Client = Aws::EC2::Client.new
+	puts "Waiting for intance #{image_this.id} to finish startup"
+	ec2Client.wait_until(:instance_status_ok, instance_ids: [image_this.id]) do |w|
+	  w.max_attempts = nil
+      w.delay = 5
+	end
+	# wait until drupal install is complete
+	max_attempts = 30
+	current_attempt = 1
+	while !self.drupal_status?(ip.output_value) && current_attempt < max_attempts do
+	  puts "Checking Drupal status... #{current_attempt}"
+	  sleep(10)
+	  current_attempt += 1
+	end
+	
+	unless current_attempt != max_attempts
+	  raise "Drupal installation error on IP #{ip.output_value}"
+	end
+	
+	puts 'Drupal is ok.'
+	puts 'Base stack creation done. Creating new EC2 image...'
+	puts 'Starting AMI creation.'
+	
+	puts "Creating image from instance: #{image_this.id}"
+	imageResp = ec2Client.create_image({
+		dry_run: false,
+		instance_id: image_this.id,
+		name: stack_name + image_this.id + "image"
+	})
+	puts "Image id is #{imageResp.image_id}. Waiting for image to be available."
+	ec2Client.wait_until(:image_available, image_ids: [imageResp.image_id]) do |w|
+	  w.max_attempts = nil
+      w.delay = 5
+	end
+	puts 'Terminating base instance'
+	self.terminate_instance(image_this.id)
+	#create the cluster stack with image
+	puts "Image is available. Creating Drupal cluster based on image #{imageResp.image_id}"
+	resp = cloudformation.create_stack(stack_name: stack_name,
+                                       template_url: cluster_template_url,
+                                       on_failure: 'ROLLBACK',
+                                       parameters: [{
+									    parameter_key: :AMIImageId,
+                                        parameter_value: imageResp.image_id,
+                                        use_previous_value: false},
+										{
+									    parameter_key: :WebServerCapacity,
+                                        parameter_value: "2",
+                                        use_previous_value: false},
+										{
+									    parameter_key: :KeyName,
+                                        parameter_value: options[:key_name],
+                                        use_previous_value: false}
+									   ])
+	cloudformation.wait_until(:stack_create_complete, stack_name: stack_name) do |w|
       w.max_attempts = nil
       w.delay = 5
       w.before_attempt do |_n|
         describe_stack_events(cloudformation, stack_name)
       end
     end
-    puts "Creating stack #{stack_name} is succesful."
-    stack = stack_info(stack_name)
+	puts "Creating stack #{stack_name} is succesful."
+	resp = cloudformation.describe_stacks(stack_name: stack_name)
+	stack = resp.stacks[0]
+	output = stack.outputs.detect {|o| o[:output_key].eql? 'WebsiteURL'}
+	elbDns = output.output_value
+	puts "Checking drupal installation on loadbalancer #{elbDns}"
+	current_attempt = 1
+	while !self.drupal_status?(elbDns) && current_attempt < max_attempts do
+	  puts "Checking Drupal status... #{current_attempt}"
+	  sleep(10)
+	  current_attempt += 1
+	end
+	if current_attempt == max_attempts
+	  raise 'An error occured while checking the Drupal cluster. Please check your AWS console.'
+	end
+	puts "Drupal cluster is ready to use on: #{elbDns}/drupal"
   end
 
   desc 'delete_stack [STACK_NAME]', 'Deletes the specified stack'
@@ -170,27 +248,6 @@ class AwsCli < Thor
         describe_stack_events(cloudformation, stack_name, 'DELETE')
       end
     end
-  end
-
-  desc 'stack_info [STACK_NAME]', 'Info about the specfied stack'
-  def stack_info(stack_name)
-    cloudformation = Aws::CloudFormation::Client.new
-    resp = cloudformation.describe_stacks(stack_name: stack_name)
-    puts 'No stacks.' if resp.stacks.empty?
-    stack = resp.stacks[0]
-    puts "ID: #{stack.stack_id}"
-    puts "Name: #{stack.stack_name}"
-    puts "Creation time: #{stack.creation_time}"
-    puts "Status: #{stack.stack_status}"
-    puts 'Parameters:'
-    stack.parameters.each do |p|
-      puts "  #{p.parameter_key}: #{p.parameter_value}"
-    end
-    puts 'Outputs:'
-    stack.outputs.each do |o|
-      puts "  #{o.output_key}: #{o.output_value}"
-    end
-    stack
   end
 
   no_commands do
@@ -213,6 +270,7 @@ class AwsCli < Thor
         stack_events.reverse.each do |ev|
           puts "#{ev.timestamp}  #{ev.resource_status}  #{ev.resource_type} #{ev.logical_resource_id}  #{ev.resource_status_reason}"
         end
+		puts "--"
     end
 
     def get_user_input(message, default)
@@ -233,6 +291,34 @@ class AwsCli < Thor
         use_previous_value: false
       }
     end
+	
+	def stop_instance(instance_id)
+	  ec2 = Aws::EC2::Resource.new
+	  i = ec2.instance(instance_id)
+	  if i.exists?
+	    case i.state.code
+	    when 48  # terminated
+		  puts "#{instance_id} is terminated, so you cannot stop it"
+	    when 64  # stopping
+		  puts "#{instance_id} is stopping, so it will be stopped in a bit"
+	    when 89  # stopped
+		  puts "#{instance_id} is already stopped"
+	    else
+		  i.stop
+		  puts "#{instance_id} stop process started"
+	    end
+	  end
+	end
+	
+	def terminate_instance(instance_id)
+	  ec2 = Aws::EC2::Resource.new
+	  i = ec2.instance(instance_id)
+	  if i.exists?
+		  i.terminate
+		  puts "Terminating instance #{instance_id}"
+	  end
+	end
+	
   end
 end
 AwsCli.start(ARGV)
