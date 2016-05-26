@@ -86,7 +86,7 @@ Options:
 
 #### Cluster setup with the CLI
 ##### Cooking a base EC2 instance 
-The drupal_recipe.tpl will create
+The [drupal_recipe.tpl](https://github.com/bdsrstnt/devops-practice/blob/master/drupal_recipe.tpl) will create
 * an EC2 instance from image **ami-87564feb**
 * RDS MySql database 
 
@@ -99,7 +99,7 @@ After the installation is done, your instance will have a running Apache with PH
 After the base instance is up and running, with Drupal installed, the CLI creates a new AMI from this istance. When the AMI is available, the base instance is terminated.
 
 ##### Creating the Drupal cluster
-The CLI will use the drupal_cluster.tpl to create the cluster stack.
+The CLI will use the [drupal_cluster.tpl](https://github.com/bdsrstnt/devops-practice/blob/master/drupal_cluster.tpl) to create the cluster stack.
 Parts:
 * LoadBalancer
 * AutoScalingGroup
