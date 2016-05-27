@@ -34,9 +34,6 @@ $ ruby awscli.rb [command] [--options]
 ```
 
 #### Commands
-**autoscale_info**<br>
-Prints information about autoscaling groups
-
 **drupal_status [HOST]**<br>
 Check drupal status. HOST can be public IP or DNS
 
@@ -85,10 +82,19 @@ Options:
 ```
 
 #### Cluster setup with the CLI
-##### Cooking a base EC2 instance 
+
+##### Creating the cluster setup
+The CLI will use the [drupal_cluster.tpl](https://github.com/bdsrstnt/devops-practice/blob/master/drupal_cluster.tpl) to create the cluster stack.
+Parts:
+* LoadBalancer
+* AutoScalingGroup
+* LaunchConfiguration with the previously created AMI
+* SecurityGroup for HTTP 80 and SSH 20 access
+* RDS MySql database
+* 
+##### Cooking a base EC2 instance with drupal_recipe-tpl
 The [drupal_recipe.tpl](https://github.com/bdsrstnt/devops-practice/blob/master/drupal_recipe.tpl) will create
 * an EC2 instance from image **ami-87564feb**
-* RDS MySql database 
 
 The template will run the [install-drupal.sh](https://github.com/bdsrstnt/devops-practice/blob/master/install-drupal.sh) script to install the **Apache, PHP and Drupal**.
 Installation is done by Puppet. The used manifest is [drupal-install.pp](https://github.com/bdsrstnt/devops-practice/blob/master/puppet/drupal-install.pp)
@@ -96,14 +102,9 @@ Installation is done by Puppet. The used manifest is [drupal-install.pp](https:/
 After the installation is done, your instance will have a running Apache with PHP, and Drupal installed on it.
 
 ##### Creating AMI from the base instance
-After the base instance is up and running, with Drupal installed, the CLI creates a new AMI from this istance. When the AMI is available, the base instance is terminated.
+After the base instance is up and running, with Drupal installed, the CLI creates a new AMI from this istance. When the AMI is available, the base instance stack is deleted.
 
-##### Creating the Drupal cluster
-The CLI will use the [drupal_cluster.tpl](https://github.com/bdsrstnt/devops-practice/blob/master/drupal_cluster.tpl) to create the cluster stack.
-Parts:
-* LoadBalancer
-* AutoScalingGroup
-* LaunchConfiguration with the previously created AMI
-* SecurityGroup for HTTP 80 and SSH 20 access
+##### Adding Drupal to the cluster
+The CLI updates the cluster stack with the newly created AMI.
 
 When the process is done, you can access the newly created Drupal cluster via the load balancer.
