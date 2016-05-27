@@ -52,61 +52,13 @@
       "AllowedPattern": "[a-zA-Z0-9]*",
       "ConstraintDescription": "must contain only alphanumeric characters."
     },
-    "DBAllocatedStorage": {
-      "Default": "5",
-      "Description": "The size of the database (Gb)",
-      "Type": "Number",
-      "MinValue": "5",
-      "MaxValue": "1024",
-      "ConstraintDescription": "must be between 5 and 1024Gb."
+    "DBEndpoint": {
+      "Description": "MySQL databse endpoint address",
+      "Type": "String"
     },
-    "DBInstanceClass": {
-      "Description": "The database instance type",
-      "Type": "String",
-      "Default": "db.t2.micro",
-      "AllowedValues": [
-        "db.t1.micro",
-        "db.m1.small",
-        "db.m1.medium",
-        "db.m1.large",
-        "db.m1.xlarge",
-        "db.m2.xlarge",
-        "db.m2.2xlarge",
-        "db.m2.4xlarge",
-        "db.m3.medium",
-        "db.m3.large",
-        "db.m3.xlarge",
-        "db.m3.2xlarge",
-        "db.m4.large",
-        "db.m4.xlarge",
-        "db.m4.2xlarge",
-        "db.m4.4xlarge",
-        "db.m4.10xlarge",
-        "db.r3.large",
-        "db.r3.xlarge",
-        "db.r3.2xlarge",
-        "db.r3.4xlarge",
-        "db.r3.8xlarge",
-        "db.m2.xlarge",
-        "db.m2.2xlarge",
-        "db.m2.4xlarge",
-        "db.cr1.8xlarge",
-        "db.t2.micro",
-        "db.t2.small",
-        "db.t2.medium",
-        "db.t2.large"
-      ],
-      "ConstraintDescription": "must select a valid database instance type."
-    },
-    "MultiAZDatabase": {
-      "Default": "false",
-      "Description": "Create a Multi-AZ MySQL Amazon RDS database instance",
-      "Type": "String",
-      "AllowedValues": [
-        "true",
-        "false"
-      ],
-      "ConstraintDescription": "must be either true or false."
+    "DBPort": {
+      "Description": "MySQL databse endpoint port",
+      "Type": "Number"
     },
     "InstanceType": {
       "Description": "WebServer EC2 instance type",
@@ -180,43 +132,6 @@
       "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
     }
   },
-  "Conditions": {
-    "Is-EC2-VPC": {
-      "Fn::Or": [
-        {
-          "Fn::Equals": [
-            {
-              "Ref": "AWS::Region"
-            },
-            "eu-central-1"
-          ]
-        },
-        {
-          "Fn::Equals": [
-            {
-              "Ref": "AWS::Region"
-            },
-            "cn-north-1"
-          ]
-        },
-        {
-          "Fn::Equals": [
-            {
-              "Ref": "AWS::Region"
-            },
-            "ap-northeast-2"
-          ]
-        }
-      ]
-    },
-    "Is-EC2-Classic": {
-      "Fn::Not": [
-        {
-          "Condition": "Is-EC2-VPC"
-        }
-      ]
-    }
-  },
   "Resources": {
     "BaseInstance": {
       "Type": "AWS::EC2::Instance",
@@ -255,18 +170,12 @@
                 "\n",
                 "export FACTER_DRUPAL_DB_HOST=",
                 {
-                  "Fn::GetAtt": [
-                    "MySQLDatabase",
-                    "Endpoint.Address"
-                  ]
+                  "Ref": "DBEndpoint"
                 },
                 "\n",
                 "export FACTER_DRUPAL_DB_PORT=",
                 {
-                  "Fn::GetAtt": [
-                    "MySQLDatabase",
-                    "Endpoint.Port"
-                  ]
+                  "Ref": "DBPort"
                 },
                 "\n",
                 "export FACTER_DRUPAL_DB_NAME=",
@@ -340,71 +249,6 @@
       "Metadata": {
         "AWS::CloudFormation::Designer": {
           "id": "3b981d07-544c-46e2-bbe7-efb304302694"
-        }
-      }
-    },
-    "DBEC2SecurityGroup": {
-      "Type": "AWS::EC2::SecurityGroup",
-      "Condition": "Is-EC2-VPC",
-      "Properties": {
-        "GroupDescription": "Open database for access",
-        "SecurityGroupIngress": [
-          {
-            "IpProtocol": "tcp",
-            "FromPort": "3306",
-            "ToPort": "3306",
-            "CidrIp": "0.0.0.0/0"
-          }
-        ]
-      },
-      "Metadata": {
-        "AWS::CloudFormation::Designer": {
-          "id": "746d6979-c98f-4beb-8e75-a3087a0d851a"
-        }
-      }
-    },
-    "MySQLDatabase": {
-      "Type": "AWS::RDS::DBInstance",
-      "Properties": {
-        "Engine": "MySQL",
-        "DBName": {
-          "Ref": "DBName"
-        },
-        "MultiAZ": {
-          "Ref": "MultiAZDatabase"
-        },
-        "MasterUsername": {
-          "Ref": "DBUser"
-        },
-        "MasterUserPassword": {
-          "Ref": "DBPassword"
-        },
-        "DBInstanceClass": {
-          "Ref": "DBInstanceClass"
-        },
-        "AllocatedStorage": {
-          "Ref": "DBAllocatedStorage"
-        },
-        "VPCSecurityGroups": {
-          "Fn::If": [
-            "Is-EC2-VPC",
-            [
-              {
-                "Fn::GetAtt": [
-                  "DBEC2SecurityGroup",
-                  "GroupId"
-                ]
-              }
-            ],
-            {
-              "Ref": "AWS::NoValue"
-            }
-          ]
-        }
-      },
-      "Metadata": {
-        "AWS::CloudFormation::Designer": {
-          "id": "9d9c0e54-d927-467e-90d4-cd02caa5c99a"
         }
       }
     }

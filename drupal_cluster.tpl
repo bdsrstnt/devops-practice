@@ -7,16 +7,100 @@
       "Type": "AWS::EC2::KeyPair::KeyName",
       "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
     },
+    "DBName": {
+      "Default": "myDatabase",
+      "Description": "MySQL database name",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "64",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+    },
+    "DBUser": {
+      "NoEcho": "true",
+      "Description": "Username for MySQL database access",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "16",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+    },
+    "DBPassword": {
+      "NoEcho": "true",
+      "Description": "Password for MySQL database access",
+      "Type": "String",
+      "MinLength": "8",
+      "MaxLength": "41",
+      "AllowedPattern": "[a-zA-Z0-9]*",
+      "ConstraintDescription": "must contain only alphanumeric characters."
+    },
+    "DBAllocatedStorage": {
+      "Default": "5",
+      "Description": "The size of the database (Gb)",
+      "Type": "Number",
+      "MinValue": "5",
+      "MaxValue": "1024",
+      "ConstraintDescription": "must be between 5 and 1024Gb."
+    },
+    "DBInstanceClass": {
+      "Description": "The database instance type",
+      "Type": "String",
+      "Default": "db.t2.micro",
+      "AllowedValues": [
+        "db.t1.micro",
+        "db.m1.small",
+        "db.m1.medium",
+        "db.m1.large",
+        "db.m1.xlarge",
+        "db.m2.xlarge",
+        "db.m2.2xlarge",
+        "db.m2.4xlarge",
+        "db.m3.medium",
+        "db.m3.large",
+        "db.m3.xlarge",
+        "db.m3.2xlarge",
+        "db.m4.large",
+        "db.m4.xlarge",
+        "db.m4.2xlarge",
+        "db.m4.4xlarge",
+        "db.m4.10xlarge",
+        "db.r3.large",
+        "db.r3.xlarge",
+        "db.r3.2xlarge",
+        "db.r3.4xlarge",
+        "db.r3.8xlarge",
+        "db.m2.xlarge",
+        "db.m2.2xlarge",
+        "db.m2.4xlarge",
+        "db.cr1.8xlarge",
+        "db.t2.micro",
+        "db.t2.small",
+        "db.t2.medium",
+        "db.t2.large"
+      ],
+      "ConstraintDescription": "must select a valid database instance type."
+    },
+    "MultiAZDatabase": {
+      "Default": "false",
+      "Description": "Create a Multi-AZ MySQL Amazon RDS database instance",
+      "Type": "String",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "ConstraintDescription": "must be either true or false."
+    },
     "AMIImageId": {
       "Description": "AMI image id",
       "Type": "String",
-      "ConstraintDescription": "must be the name of an existing AMI image id."
+      "Default": "ami-87564feb",
+      "ConstraintDescription": "must an existing AMI image id."
     },
     "WebServerCapacity": {
-      "Default": "2",
+      "Default": "0",
       "Description": "The initial number of WebServer instances",
       "Type": "Number",
-      "MinValue": "1",
+      "MinValue": "0",
       "MaxValue": "5",
       "ConstraintDescription": "must be between 1 and 5 EC2 instances."
     },
@@ -92,43 +176,6 @@
       "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
     }
   },
-  "Conditions": {
-    "Is-EC2-VPC": {
-      "Fn::Or": [
-        {
-          "Fn::Equals": [
-            {
-              "Ref": "AWS::Region"
-            },
-            "eu-central-1"
-          ]
-        },
-        {
-          "Fn::Equals": [
-            {
-              "Ref": "AWS::Region"
-            },
-            "cn-north-1"
-          ]
-        },
-        {
-          "Fn::Equals": [
-            {
-              "Ref": "AWS::Region"
-            },
-            "ap-northeast-2"
-          ]
-        }
-      ]
-    },
-    "Is-EC2-Classic": {
-      "Fn::Not": [
-        {
-          "Condition": "Is-EC2-VPC"
-        }
-      ]
-    }
-  },
   "Resources": {
     "ElasticLoadBalancer": {
       "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
@@ -176,7 +223,7 @@
         "LaunchConfigurationName": {
           "Ref": "LaunchConfig"
         },
-        "MinSize": "1",
+        "MinSize": "0",
         "MaxSize": "5",
         "DesiredCapacity": {
           "Ref": "WebServerCapacity"
@@ -303,11 +350,67 @@
           "id": "3b981d07-544c-46e2-bbe7-efb304302694"
         }
       }
+    },
+    "DBEC2SecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Open database for access",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "3306",
+            "ToPort": "3306",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      },
+      "Metadata": {
+        "AWS::CloudFormation::Designer": {
+          "id": "87cef48e-e251-4009-90db-e0759738d160"
+        }
+      }
+    },
+    "MySQLDatabase": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "Engine": "MySQL",
+        "DBName": {
+          "Ref": "DBName"
+        },
+        "MultiAZ": {
+          "Ref": "MultiAZDatabase"
+        },
+        "MasterUsername": {
+          "Ref": "DBUser"
+        },
+        "MasterUserPassword": {
+          "Ref": "DBPassword"
+        },
+        "DBInstanceClass": {
+          "Ref": "DBInstanceClass"
+        },
+        "AllocatedStorage": {
+          "Ref": "DBAllocatedStorage"
+        },
+        "VPCSecurityGroups": [
+          {
+            "Fn::GetAtt": [
+              "DBEC2SecurityGroup",
+              "GroupId"
+            ]
+          }
+        ]
+      },
+      "Metadata": {
+        "AWS::CloudFormation::Designer": {
+          "id": "744aadcd-f28d-419b-80f7-9070486fb968"
+        }
+      }
     }
   },
   "Outputs": {
     "WebsiteURL": {
-      "Description": "URL for newly created LAMP stack",
+      "Description": "URL for newly created Drupal cluster",
       "Value": {
         "Fn::Join": [
           "",
@@ -322,6 +425,24 @@
           ]
         ]
       }
+    },
+    "DBUrl": {
+      "Description": "URL for newly created Drupal cluster",
+      "Value": {
+        "Fn::GetAtt": [
+          "MySQLDatabase",
+          "Endpoint.Address"
+        ]
+      }
+    },
+    "DBPort": {
+      "Description": "URL for newly created Drupal cluster",
+      "Value": {
+        "Fn::GetAtt": [
+          "MySQLDatabase",
+          "Endpoint.Port"
+        ]
+      }
     }
   },
   "Metadata": {
@@ -332,8 +453,8 @@
           "height": 60
         },
         "position": {
-          "x": -20,
-          "y": 80
+          "x": -100,
+          "y": 90
         },
         "z": 1,
         "embeds": []
@@ -344,8 +465,8 @@
           "height": 60
         },
         "position": {
-          "x": 230,
-          "y": 70
+          "x": 20,
+          "y": 170
         },
         "z": 1,
         "embeds": [],
@@ -374,8 +495,8 @@
           "height": 60
         },
         "position": {
-          "x": -20,
-          "y": 230
+          "x": 20,
+          "y": 90
         },
         "z": 1,
         "embeds": [],
@@ -393,8 +514,8 @@
           "height": 60
         },
         "position": {
-          "x": 280,
-          "y": 250
+          "x": 20,
+          "y": 10
         },
         "z": 1,
         "embeds": [],
@@ -403,6 +524,33 @@
         ],
         "isrelatedto": [
           "9d9c0e54-d927-467e-90d4-cd02caa5c99a"
+        ]
+      },
+      "87cef48e-e251-4009-90db-e0759738d160": {
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "position": {
+          "x": 220,
+          "y": 90
+        },
+        "z": 1,
+        "embeds": []
+      },
+      "744aadcd-f28d-419b-80f7-9070486fb968": {
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "position": {
+          "x": 120,
+          "y": 90
+        },
+        "z": 1,
+        "embeds": [],
+        "isrelatedto": [
+          "87cef48e-e251-4009-90db-e0759738d160"
         ]
       }
     }
