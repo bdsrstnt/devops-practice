@@ -91,7 +91,7 @@ Parts:
 * LaunchConfiguration with the previously created AMI
 * SecurityGroup for HTTP 80 and SSH 20 access
 * RDS MySql database
-* 
+
 ##### Cooking a base EC2 instance with drupal_recipe-tpl
 The [drupal_recipe.tpl](https://github.com/bdsrstnt/devops-practice/blob/master/drupal_recipe.tpl) will create
 * an EC2 instance from image **ami-87564feb**
