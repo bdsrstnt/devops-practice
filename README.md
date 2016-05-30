@@ -1,10 +1,11 @@
 # Devops-practice
 Table of contents
+
 1. [Introduction](#introduction)
 2. [Files](#files)
-3. [Install Drupal](#install-drupal.sh)
-4. [Puppet manifest to install Drupal](#drupal-install.pp)
-5. [AWS CLI to create Drupal cluster](#awscli.rb)
+3. [Install Drupal](#installdrupalsh)
+4. [Puppet manifest to install Drupal](#drupalinstallpp)
+5. [AWS CLI to create Drupal cluster](#awsclirb)
 
 ## Introduction
 
